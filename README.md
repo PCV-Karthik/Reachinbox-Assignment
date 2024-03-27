@@ -15,8 +15,8 @@ Before you start, make sure you have these installed:
 ### 1. Clone the application
 
 ``` 
-git clone https://github.com/username/reachinbox.git
-cd reachinbox
+git clone https://github.com/PCV-Karthik/Reachinbox-Assignment
+
 ```
 Replace username with your GitHub username.
 
