@@ -119,7 +119,7 @@ const labelMail = async (parseObject) => {
         url: "https://chatgpt-api8.p.rapidapi.com/",
         headers: {
           "content-type": "application/json",
-          "X-RapidAPI-Key": "32a97808a2msh39bc839998defc6p1451b9jsnd640b4b97a49",
+          "X-RapidAPI-Key": process.env.RAPID_API_KEY,
           "X-RapidAPI-Host": "chatgpt-api8.p.rapidapi.com",
         },
         data: [
@@ -148,7 +148,7 @@ const writeMail = async (request) => {
         url: "https://chatgpt-api8.p.rapidapi.com/",
         headers: {
           "content-type": "application/json",
-          "X-RapidAPI-Key": "32a97808a2msh39bc839998defc6p1451b9jsnd640b4b97a49",
+          "X-RapidAPI-Key": process.env.RAPID_API_KEY,
           "X-RapidAPI-Host": "chatgpt-api8.p.rapidapi.com",
         },
         data: [
