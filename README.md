@@ -16,7 +16,6 @@ Before you start, make sure you have these installed:
 
 ``` 
 git clone https://github.com/PCV-Karthik/Reachinbox-Assignment
-
 ```
 Replace username with your GitHub username.
 
