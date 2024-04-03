@@ -1,7 +1,7 @@
 const { google } = require("googleapis");
 const axios = require("axios");
 const dotenv = require("dotenv");
-const {transport} = require("../utils/mail");
+const { transport } = require("../utils/mail");
 const { init } = require("../utils/producer");
 const Bottleneck = require("bottleneck");
 dotenv.config();
@@ -127,15 +127,15 @@ const labelAndReplyMail = async (mail) => {
   try {
     const { data } = await axios.request({
       method: "POST",
-      url: 'https://chatgpt-api8.p.rapidapi.com/',
+      url: "https://chatgpt-api8.p.rapidapi.com/",
       headers: {
-        'content-type': 'application/json',
-        'X-RapidAPI-Key': process.env.X_RapidAPI_Key,
-        'X-RapidAPI-Host': 'chatgpt-api8.p.rapidapi.com'
-      },    
+        "content-type": "application/json",
+        "X-RapidAPI-Key": process.env.X_RapidAPI_Key,
+        "X-RapidAPI-Host": "chatgpt-api8.p.rapidapi.com",
+      },
       data: [
-          {
-            content: `From the given text categorise the data into a single world ans. It can be Interested, Not interested, More information 
+        {
+          content: `From the given text categorise the data into a single world ans. It can be Interested, Not interested, More information 
   
           text : ${mail.textContent},
           
@@ -150,9 +150,9 @@ const labelAndReplyMail = async (mail) => {
           "body":body,
           }
           `,
-            role: "user",
-          },
-        ],
+          role: "user",
+        },
+      ],
     });
 
     let text = data.text;
@@ -226,7 +226,7 @@ const googleCallback = async (req, res) => {
       const messages = await getListOfMails(tokens);
       let currentLabels = await getCurrentLabels(tokens);
 
-      const existingLabels = currentLabels.labels.reduce(
+      let existingLabels = currentLabels.labels.reduce(
         (acc, label) => ({ ...acc, [label.name]: label.id }),
         {}
       );
@@ -251,30 +251,37 @@ const googleCallback = async (req, res) => {
         );
       });
 
-      Promise.all(createLabelPromises).then((responses) => {
-        currentLabels = getCurrentLabels(tokens);
-        messages.forEach(async (message) => {
-          await limiter.schedule(async () => {
-            const id = message.id;
-            const mail = await getMail(id, tokens);
-            const parsedMail = parseMail(mail);
-            const labelAndReply = await labelAndReplyMail(parsedMail);
-            await moveMailToLabel(
-              id,
-              existingLabels[labelAndReply.label],
-              tokens
-            );
-            const details = {
-              to: parsedMail.from.email,
-              cc: parsedMail.cc,
-              subject: labelAndReply.subject,
-              body: labelAndReply.body,
-            };
-            init(details);
-          });
+      await Promise.all(createLabelPromises);
+      currentLabels = await getCurrentLabels(tokens);
+      existingLabels = currentLabels.labels.reduce(
+        (acc, label) => ({ ...acc, [label.name]: label.id }),
+        {}
+      );
+
+      console.log(existingLabels);
+
+      currentLabels = getCurrentLabels(tokens);
+      messages.forEach(async (message) => {
+        await limiter.schedule(async () => {
+          const id = message.id;
+          const mail = await getMail(id, tokens);
+          const parsedMail = parseMail(mail);
+          const labelAndReply = await labelAndReplyMail(parsedMail);
+          console.log(labelAndReply);
+          await moveMailToLabel(
+            id,
+            existingLabels[labelAndReply.label],
+            tokens
+          );
+          const details = {
+            to: parsedMail.from.email,
+            cc: parsedMail.cc,
+            subject: labelAndReply.subject,
+            body: labelAndReply.body,
+          };
+          init(details);
         });
       });
-
       res.send(
         `You have successfully authenticated with Google and Sent Replies to your Email. You can now close this tab.`
       );

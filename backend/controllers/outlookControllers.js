@@ -259,7 +259,7 @@ const readAndWriteMails = async (req, res) => {
       }
     );
 
-    const existingLabels = currentFolders.data.value.reduce(
+    let existingLabels = currentFolders.data.value.reduce(
       (acc, label) => ({ ...acc, [label.displayName]: label.id }),
       {}
     );
@@ -286,14 +286,8 @@ const readAndWriteMails = async (req, res) => {
       );
     });
 
-    Promise.all(createLabelPromises)
-      .then((responses) => {
-        console.log("Labels created successfully:", responses);
-      })
-      .catch((error) => {
-        console.error("Error creating labels:", error);
-      });
-
+    const response = await Promise.all(createLabelPromises);
+    console.log(response);
     currentFolders = await axios.get(
       "https://graph.microsoft.com/v1.0/me/mailFolders",
       {
@@ -302,7 +296,11 @@ const readAndWriteMails = async (req, res) => {
         },
       }
     );
-
+    
+    existingLabels = currentFolders.data.value.reduce(
+      (acc, label) => ({ ...acc, [label.displayName]: label.id }),
+      {}
+    );
     mails.map(async (mail) => {
       await limiter.schedule(async () => {
         const parsedMail = parseMail(mail);

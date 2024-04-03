@@ -13,7 +13,7 @@ const app = express();
 app.use(cors());
 
 app.use(session({
-  secret: 'Reachinbox',
+  secret: process.env.SESSION_SECRET,
   resave: false,
   saveUninitialized: true,
 }));
