@@ -169,7 +169,7 @@ const labelAndReplyMail = async (mail) => {
       url: 'https://chatgpt-api8.p.rapidapi.com/',
       headers: {
         'content-type': 'application/json',
-        'X-RapidAPI-Key': '84b36374admshb6be32bddaa94d0p1a6f30jsn0e5570cce5cd',
+        'X-RapidAPI-Key': process.env.X_RapidAPI_Key,
         'X-RapidAPI-Host': 'chatgpt-api8.p.rapidapi.com'
       },    
       data: [
