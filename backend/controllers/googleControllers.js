@@ -1,7 +1,7 @@
 const { google } = require("googleapis");
 const axios = require("axios");
 const dotenv = require("dotenv");
-const { transport } = require("../utils/mail");
+const {transport} = require("../utils/mail");
 const { init } = require("../utils/producer");
 const Bottleneck = require("bottleneck");
 dotenv.config();
@@ -30,15 +30,15 @@ const redirectToGoogleConsent = (req, res) => {
 
 const getListOfMails = async (tokens) => {
   try {
-    const response = await axios({
-      method: "get",
-      url: "https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=100",
-      format: "full",
-      headers: {
-        Authorization: `Bearer ${tokens.access_token}`,
-      },
-    });
-    return response.data;
+    const response = await axios.get(
+      "https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=100",
+      {
+        headers: {
+          Authorization: `Bearer ${tokens.access_token}`,
+        },
+      }
+    );
+    return response.data.messages;
   } catch (error) {
     console.log(error);
   }
@@ -88,12 +88,10 @@ const parseMail = (mail) => {
   } else {
     textContent = Buffer.from(payload.body.data, "base64").toString("utf-8");
   }
-  const emailContext = `${subject} ${textContent} `;
 
   const parseObject = {
     subject,
     textContent,
-    emailContext,
     from: {
       name: fromName,
       email: fromEmail,
@@ -110,99 +108,80 @@ const limiter = new Bottleneck({
 
 const getCurrentLabels = async (tokens) => {
   try {
-    return await limiter.schedule(async () => {
-      console.log("Waiting to start getting labels");
-      const { data } = await axios.get(
-        "https://gmail.googleapis.com/gmail/v1/users/me/labels",
-        {
-          headers: {
-            Authorization: `Bearer ${tokens.access_token}`,
-          },
-        }
-      );
-      return data;
-    });
-  } catch (error) {
-    console.log(error.message);
-  };
-};
-
-const labelMail = async (tokens,id, parseObject) => {
-  try {
-    return await limiter.schedule(async () => {
-      console.log("Waiting to start labelling mail");
-      const emailContext = parseObject.emailContext;
-      const { data } = await axios.request({
-        method: "POST",
-        url: "https://chatgpt-api8.p.rapidapi.com/",
+    console.log("Waiting to start getting labels");
+    const { data } = await axios.get(
+      "https://gmail.googleapis.com/gmail/v1/users/me/labels",
+      {
         headers: {
-          "content-type": "application/json",
-          "X-RapidAPI-Key": process.env.X-RapidAPI-Key,
-          "X-RapidAPI-Host": "chatgpt-api8.p.rapidapi.com",
+          Authorization: `Bearer ${tokens.access_token}`,
         },
-        data: [
-          {
-            content: `based on the following text  just give one word answer, Categorizing the text based on the content and assign a label from the given options -
-              Interested,
-              Not Interested,
-              More information. text is : ${emailContext}`,
-            role: "user",
-          },
-        ],
-      });
-
-      // console.log(data.text,data.error);
-      const currentLabels = await getCurrentLabels(tokens);
-      const labelMap = currentLabels.labels.reduce((acc, label) => {
-        acc[label.name] = label.id;
-        return acc;
-      }, {});
-
-
-      console.log(labelMap);
-      const res = await axios.post(
-        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}/modify`,
-        {
-          "addLabelIds": [labelMap[data.text]],
-          "removeLabelIds": ["INBOX"],
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${tokens.access_token}`,
-          },
-        }
-      );
-      console.log(res.data);
-      return data.text;
-    });
+      }
+    );
+    return data;
   } catch (error) {
     console.log(error.message);
   }
 };
 
-const writeMail = async (request) => {
+const labelAndReplyMail = async (mail) => {
   try {
-    return await limiter.schedule(async () => {
-      console.log("Waiting to start writing mail");
-      const { data } = await axios.request({
-        method: "POST",
-        url: "https://chatgpt-api8.p.rapidapi.com/",
-        headers: {
-          "content-type": "application/json",
-          "X-RapidAPI-Key": process.env.X-RapidAPI-Key,
-          "X-RapidAPI-Host": "chatgpt-api8.p.rapidapi.com",
-        },
-        data: [
+    const { data } = await axios.request({
+      method: "POST",
+      url: 'https://chatgpt-api8.p.rapidapi.com/',
+      headers: {
+        'content-type': 'application/json',
+        'X-RapidAPI-Key': '84b36374admshb6be32bddaa94d0p1a6f30jsn0e5570cce5cd',
+        'X-RapidAPI-Host': 'chatgpt-api8.p.rapidapi.com'
+      },    
+      data: [
           {
-            content: request,
+            content: `From the given text categorise the data into a single world ans. It can be Interested, Not interested, More information 
+  
+          text : ${mail.textContent},
+          
+          Based on that word write a reply, just the subject and body to ${mail.from.name} following the below rules:
+          if Interested: write an email on behalf of Raj, Manager, Reachinbox asking ${mail.from.name}  if they are willing to hop on to a demo call by suggesting a time.
+          if Not Interested: write an email on behalf of Raj, Manager, Reachinbox thanking ${mail.from.name} for their time and asking them if they would like to be contacted in the future from Raj
+          if More Information : write an email on behalf of Raj, Manager, Reachinbox asking ${mail.from.name} if they would like more information about the product from Raj. 
+          And i need information in the following json format only.
+          {
+          "label" : Label,
+          "subject":Subject,
+          "body":body,
+          }
+          `,
             role: "user",
           },
         ],
-      });
-      return data.text;
     });
+
+    let text = data.text;
+    const response = JSON.parse(text);
+    return response;
   } catch (error) {
     console.log(error);
+  }
+};
+
+const moveMailToLabel = async (id, labelId, tokens) => {
+  try {
+    console.log("Waiting to start moving mail to label");
+    const { data } = await axios.post(
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}/modify`,
+      {
+        addLabelIds: [labelId],
+        removeLabelIds: ["INBOX"],
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${tokens.access_token}`,
+        },
+      }
+    );
+    console.log(`Mail moved to ${labelId} label`);
+    return data;
+  } catch (error) {
+    console.log(error.message);
   }
 };
 
@@ -244,28 +223,21 @@ const googleCallback = async (req, res) => {
       }
       oAuth2Client.setCredentials(tokens);
 
-      const data = await getListOfMails(tokens);
-      const messages = data.messages;
-      const currentLabels = await axios.get(
-        "https://gmail.googleapis.com/gmail/v1/users/me/labels",
-        {
-          headers: {
-            Authorization: `Bearer ${tokens.access_token}`,
-          },
-        }
+      const messages = await getListOfMails(tokens);
+      let currentLabels = await getCurrentLabels(tokens);
+
+      const existingLabels = currentLabels.labels.reduce(
+        (acc, label) => ({ ...acc, [label.name]: label.id }),
+        {}
       );
 
-      const existingLabelNames = currentLabels.data.labels.map(
-        (label) => label.name
-      );
       const labelsToCreate = [
         "Interested",
         "Not Interested",
         "More Information",
-      ].filter((label) => !existingLabelNames.includes(label));
+      ].filter((label) => !existingLabels.hasOwnProperty(label));
 
       const createLabelPromises = labelsToCreate.map(async (label) => {
-        await limiter.schedule(async () => {
         return axios.post(
           `https://gmail.googleapis.com/gmail/v1/users/me/labels`,
           {
@@ -277,52 +249,32 @@ const googleCallback = async (req, res) => {
             },
           }
         );
-        });
       });
 
-      Promise.all(createLabelPromises)
-        .then((responses) => {
-          console.log("Labels created successfully:", responses);
-        })
-        .catch((error) => {
-          console.error("Error creating labels:", error);
-        });
-
-      messages.forEach(async (message) => {
-        await limiter.schedule(async () => {
-          const id = message.id;
-          const mail = await getMail(id, tokens);
-          const parsedMail = parseMail(mail);
-          console.log(parsedMail);
-          const label = await labelMail(tokens,id, parsedMail);
-          console.log(label);
-          let request = "";
-          switch (label) {
-            case "Interested":
-              request = `Read ${parsedMail.emailContext} and write an email on behalf of Raj, Manager, Reachinbox asking ${parsedMail.from.name}  if they are willing to hop on to a demo call by suggesting a time from Raj`;
-              break;
-            case "Not Interested":
-              request = `Read ${parsedMail.emailContext} and write an email on behalf of Raj, Manager, Reachinbox thanking ${parsedMail.from.name} for their time and asking them if they would like to be contacted in the future from Raj`;
-              break;
-            case "More information":
-              request = `Read ${parsedMail.emailContext} and write an email on behalf of Raj, Manager, Reachinbox asking ${parsedMail.from.name} if they would like more information about the product from Raj`;
-              break;
-            default:
-              request = `Read ${parsedMail.emailContext} and write an email on behalf of Raj, Manager, Reachinbox asking ${parsedMail.from.name} if they are willing to hop on to a demo call by suggesting a time Raj`;
-          }
-
-          setTimeout(async () => {
-            const body = await writeMail(request);
+      Promise.all(createLabelPromises).then((responses) => {
+        currentLabels = getCurrentLabels(tokens);
+        messages.forEach(async (message) => {
+          await limiter.schedule(async () => {
+            const id = message.id;
+            const mail = await getMail(id, tokens);
+            const parsedMail = parseMail(mail);
+            const labelAndReply = await labelAndReplyMail(parsedMail);
+            await moveMailToLabel(
+              id,
+              existingLabels[labelAndReply.label],
+              tokens
+            );
             const details = {
               to: parsedMail.from.email,
               cc: parsedMail.cc,
-              subject: parsedMail.subject,
-              body: body,
+              subject: labelAndReply.subject,
+              body: labelAndReply.body,
             };
             init(details);
-          }, 2000);
+          });
         });
       });
+
       res.send(
         `You have successfully authenticated with Google and Sent Replies to your Email. You can now close this tab.`
       );
